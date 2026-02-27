@@ -23,8 +23,47 @@ let state = loadState();
 if (!state.ttsLang) state.ttsLang = 'es';
 const ttsLangEl = document.getElementById('tts-lang');
 if (ttsLangEl && !state.ttsLang) ttsLangEl.value = 'es';
-let steps = Array.isArray(state.steps) ? state.steps.map((s, i) => ({ ...s, id: s.id || 'legacy-' + i + '-' + s.minutesBefore })) : [];
+let steps = Array.isArray(state.steps)
+  ? state.steps.map((s, i) => {
+      const id = s.id || 'legacy-' + i + '-' + (s.minutesBefore ?? s.offsetSeconds ?? 0);
+      const offsetSeconds =
+        typeof s.offsetSeconds === 'number'
+          ? s.offsetSeconds
+          : typeof s.minutesBefore === 'number'
+            ? s.minutesBefore * 60
+            : 0;
+      return { id, label: s.label, offsetSeconds };
+    })
+  : [];
 const announcedStepIds = new Set();
+
+function getStepOffsetSeconds(step) {
+  if (typeof step.offsetSeconds === 'number') return step.offsetSeconds;
+  if (typeof step.minutesBefore === 'number') return step.minutesBefore * 60;
+  return 0;
+}
+
+function getStepOffsetMs(step) {
+  return getStepOffsetSeconds(step) * 1000;
+}
+
+function formatStepOffsetForSpeech(step) {
+  const totalSeconds = getStepOffsetSeconds(step);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (seconds === 0) return minutes + ' minutes';
+  if (minutes === 0) return seconds + ' seconds';
+  return minutes + ' minutes ' + seconds + ' seconds';
+}
+
+function formatStepOffsetShort(step) {
+  const totalSeconds = getStepOffsetSeconds(step);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (seconds === 0) return minutes + 'm';
+  if (minutes === 0) return seconds + 's';
+  return minutes + 'm ' + String(seconds).padStart(2, '0') + 's';
+}
 
 // --- Text-to-speech: load voices once and pick natural-sounding voice ---
 let cachedVoices = [];
@@ -80,10 +119,10 @@ function checkAndSpeakSteps() {
   if (!targetMs) return;
   const now = Date.now();
   for (const step of steps) {
-    const stepTimeMs = targetMs - step.minutesBefore * 60 * 1000;
+    const stepTimeMs = targetMs - getStepOffsetMs(step);
     if (now >= stepTimeMs && !announcedStepIds.has(step.id)) {
       announcedStepIds.add(step.id);
-      speak(step.label || 'Step at ' + step.minutesBefore + ' minutes');
+      speak(step.label || 'Step at ' + formatStepOffsetForSpeech(step) + ' before');
     }
   }
 }
@@ -138,24 +177,24 @@ function updateCountdown() {
 function getStepStatus(step, sortedSteps) {
   const targetMs = getTargetMs();
   if (!targetMs) return 'future';
-  const stepTimeMs = targetMs - step.minutesBefore * 60 * 1000;
+  const stepTimeMs = targetMs - getStepOffsetMs(step);
   const now = Date.now();
   if (now > stepTimeMs) return 'past';
-  const nextUpcoming = sortedSteps.find(s => targetMs - s.minutesBefore * 60 * 1000 > now);
+  const nextUpcoming = sortedSteps.find(s => targetMs - getStepOffsetMs(s) > now);
   const isNext = nextUpcoming && nextUpcoming.id === step.id;
   return isNext ? 'current' : 'future';
 }
 
 function formatStepTime(step) {
   const targetMs = getTargetMs();
-  if (!targetMs) return step.minutesBefore + ' min before';
-  const stepTime = new Date(targetMs - step.minutesBefore * 60 * 1000);
-  return stepTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) + ' (' + step.minutesBefore + 'm before)';
+  if (!targetMs) return formatStepOffsetShort(step) + ' before';
+  const stepTime = new Date(targetMs - getStepOffsetMs(step));
+  return stepTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) + ' (' + formatStepOffsetShort(step) + ' before)';
 }
 
 function renderSteps() {
   const list = document.getElementById('steps-list');
-  const sorted = [...steps].sort((a, b) => b.minutesBefore - a.minutesBefore);
+  const sorted = [...steps].sort((a, b) => getStepOffsetSeconds(b) - getStepOffsetSeconds(a));
 
   if (sorted.length === 0) {
     list.innerHTML = '<li class="empty-state">No steps yet. Add steps with their "minutes before target".</li>';
@@ -245,14 +284,30 @@ document.getElementById('set-target').addEventListener('click', () => {
 
 document.getElementById('add-step').addEventListener('click', () => {
   const minutesEl = document.getElementById('step-minutes');
+  const secondsEl = document.getElementById('step-seconds');
   const labelEl = document.getElementById('step-label');
   const minutes = parseInt(minutesEl.value, 10);
-  if (Number.isNaN(minutes) || minutes < 0) return;
-  const label = (labelEl.value || '').trim() || 'Step at ' + minutes + ' min';
-  steps.push({ id: Date.now() + '-' + Math.random().toString(36).slice(2), minutesBefore: minutes, label });
-  steps.sort((a, b) => b.minutesBefore - a.minutesBefore);
+  const seconds = secondsEl ? parseInt(secondsEl.value, 10) : 0;
+
+  const safeMinutes = Number.isNaN(minutes) ? 0 : minutes;
+  const safeSeconds = Number.isNaN(seconds) ? 0 : seconds;
+  if (safeMinutes < 0 || safeSeconds < 0 || safeSeconds > 59) return;
+  const totalSeconds = safeMinutes * 60 + safeSeconds;
+  if (totalSeconds <= 0) return;
+
+  const tempStep = { offsetSeconds: totalSeconds };
+  const defaultLabel = 'Step at ' + formatStepOffsetShort(tempStep) + ' before';
+  const label = (labelEl.value || '').trim() || defaultLabel;
+
+  steps.push({
+    id: Date.now() + '-' + Math.random().toString(36).slice(2),
+    offsetSeconds: totalSeconds,
+    label
+  });
+  steps.sort((a, b) => getStepOffsetSeconds(b) - getStepOffsetSeconds(a));
   saveState({ ...state, steps });
   minutesEl.value = '';
+  if (secondsEl) secondsEl.value = '';
   labelEl.value = '';
   renderSteps();
 });
