@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Countdown + Steps</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <h1>Cuenta atrás</h1>
+
+    <div class="panel">
+        <h2>Momento del evento</h2>
+        <div class="row">
+            <input type="datetime-local" id="target-datetime" />
+            <button type="button" class="btn-primary" id="set-target">Set target</button>
+        </div>
+        <p class="target-label" id="target-label">No target set</p>
+        <div class="row" style="margin-top: 0.75rem;">
+            <label for="tts-lang">Voice language</label>
+            <select id="tts-lang" aria-label="Text-to-speech language">
+                <option value="es">Spanish</option>
+                <option value="en">English</option>
+            </select>
+        </div>
+        <div class="row" style="margin-top: 0.5rem;">
+            <label for="tts-voice">Voice</label>
+            <select id="tts-voice" aria-label="Text-to-speech voice">
+                <option value="">Default (best for language)</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="countdown-display future" id="countdown" aria-live="polite">
+        Set a target time to start
+    </div>
+
+    <div class="panel">
+        <h2>Añadir paso (por ejemplo: 5 minutos para el contacto)</h2>
+
+        <div class="add-step-form">
+            <div class="row">
+                <input type="number" id="step-minutes" min="0" step="1" placeholder="Minutes before" />
+                <span style="color: var(--muted); font-size: 0.9rem;">minutos antes del evento</span>
+            </div>
+            <div class="row">
+                <input type="text" id="step-label" placeholder="Step label (e.g. First contact)" />
+                <button type="button" class="btn-primary" id="add-step">Añadir paso</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>Steps timeline</h2>
+        <ul class="steps-list" id="steps-list">
+            <li class="empty-state">No steps yet. Add steps with their "minutes before target".</li>
+        </ul>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
